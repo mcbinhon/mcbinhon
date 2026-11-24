@@ -1,0 +1,12 @@
+{
+  "name": "agente-video-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agente que recebe pedidos de vídeo pelo WhatsApp (Evolution API), gera o vídeo com Claude Code + skills da iArt e devolve no WhatsApp. Inclui painel de acompanhamento e relatório de tokens.",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.js",
+    "teste": "node --disable-warning=ExperimentalWarning scripts/teste-local.js"
+  }
+}

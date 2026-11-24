@@ -1,0 +1,36 @@
+# Evolution API (WhatsApp open source) + Postgres + Redis
+# Sobe com:  docker compose up -d
+services:
+  evolution-api:
+    container_name: evolution_api
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: always
+    depends_on: [evolution-postgres, evolution-redis]
+    ports:
+      - "127.0.0.1:8080:8080"   # só acessível do próprio PC
+    env_file: .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # para o webhook chegar no agente
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  evolution-postgres:
+    container_name: evolution_postgres
+    image: postgres:15
+    restart: always
+    env_file: .env
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+
+  evolution-redis:
+    container_name: evolution_redis
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - evolution_redis:/data
+
+volumes:
+  evolution_instances:
+  evolution_pg:
+  evolution_redis:

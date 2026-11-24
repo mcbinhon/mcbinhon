@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agente de Vídeo</title>
+<script src="/vendor/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --ink: #1a1d23; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --accent-soft: #e8efff; --ok: #15803d; --ok-soft: #e7f6ec; --warn: #b45309; --warn-soft: #fdf3e1;
+    --bad: #b91c1c; --bad-soft: #fde8e8; --info: #6d28d9; --info-soft: #f1eafe; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1115; --card: #171a21; --ink: #e8eaed; --muted: #9aa1ad; --line: #2a2f3a;
+      --accent: #6b9bff; --accent-soft: #1c2740; --ok: #4ade80; --ok-soft: #15291d; --warn: #fbbf24; --warn-soft: #2e2512;
+      --bad: #f87171; --bad-soft: #321818; --info: #b49cff; --info-soft: #241d3a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 24px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .grow { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--line); color: var(--muted); white-space: nowrap; }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.bad { background: var(--bad-soft); color: var(--bad); } .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--bad); }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 60px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .kpi .l { color: var(--muted); font-size: 12px; }
+  .kpi .v { font-size: 24px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .kpi .s { color: var(--muted); font-size: 12px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 14px; color: var(--muted); font-weight: 600; }
+  .tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  input, select { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--card); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr.click { cursor: pointer; } tbody tr.click:hover { background: var(--accent-soft); }
+  .idea { max-width: 320px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .st { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+  .st.coletando { background: var(--info-soft); color: var(--info); } .st.na_fila { background: var(--warn-soft); color: var(--warn); }
+  .st.gerando { background: var(--accent-soft); color: var(--accent); } .st.entregue, .st.finalizado { background: var(--ok-soft); color: var(--ok); }
+  .st.falhou { background: var(--bad-soft); color: var(--bad); } .st.cancelado, .st.expirado { background: var(--line); color: var(--muted); }
+  .empty { padding: 40px; text-align: center; color: var(--muted); }
+  /* painel lateral */
+  .drawer { position: fixed; inset: 0 0 0 auto; width: min(720px, 100vw); background: var(--bg); border-left: 1px solid var(--line); box-shadow: -8px 0 30px rgba(0,0,0,.15); transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility .2s; z-index: 20; overflow-y: auto; }
+  .drawer.open { transform: none; visibility: visible; }
+  .drawer .head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; flex-wrap: wrap; }
+  .drawer .head h2 { margin: 0; font-size: 16px; flex: 1; }
+  .drawer section { padding: 14px 20px; }
+  .drawer h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+  dt { color: var(--muted); } dd { margin: 0; white-space: pre-wrap; word-break: break-word; }
+  video { width: 100%; max-height: 420px; background: #000; border-radius: 10px; }
+  .thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .thumbs a { display: block; width: 84px; height: 84px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 11px; text-decoration: none; text-align: center; padding-top: 30px; }
+  .thumbs a.img { padding: 0; } .thumbs img { width: 100%; height: 100%; object-fit: cover; }
+  .timeline { list-style: none; margin: 0; padding: 0; }
+  .timeline li { display: grid; grid-template-columns: 62px 74px 1fr; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .timeline .ts { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+  .timeline .k { font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .k.entrada { color: var(--info); } .k.saida { color: var(--ok); } .k.agente { color: var(--accent); } .k.sistema { color: var(--muted); } .k.erro { color: var(--bad); }
+  .timeline .t { white-space: pre-wrap; word-break: break-word; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; padding: 6px 14px; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .chartbox { padding: 16px; height: 320px; }
+  .grid2 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 30; padding: 16px; }
+  .modal.open { display: flex; }
+  .modal .box { background: var(--card); border-radius: 14px; padding: 22px; width: min(420px, 100%); text-align: center; }
+  .modal img { width: 280px; max-width: 100%; background: #fff; padding: 8px; border-radius: 8px; }
+  .muted { color: var(--muted); }
+  @media (max-width: 640px) { header, main { padding-left: 16px; padding-right: 16px; } .timeline li { grid-template-columns: 54px 1fr; } .timeline .k { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 Agente de Vídeo</h1>
+  <span id="wa" class="pill">WhatsApp…</span>
+  <span id="fila" class="pill">fila</span>
+  <span class="grow"></span>
+  <button id="btnConectar">Conectar WhatsApp</button>
+</header>
+
+<main>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="tabs">
+    <button class="on" data-tab="pedidos">Pedidos</button>
+    <button data-tab="tokens">Relatório de tokens</button>
+  </div>
+
+  <div id="tab-pedidos">
+    <div class="bar">
+      <select id="fStatus">
+        <option value="">Todos os status</option>
+        <option value="coletando">Em conversa</option><option value="na_fila">Na fila</option><option value="gerando">Gerando</option>
+        <option value="entregue">Entregue</option><option value="finalizado">Finalizado</option><option value="falhou">Falhou</option>
+        <option value="cancelado">Cancelado</option><option value="expirado">Expirado</option>
+      </select>
+      <input id="fBusca" placeholder="Buscar nº, tipo ou ideia…" style="flex:1;min-width:180px">
+    </div>
+    <div class="card scroll">
+      <table>
+        <thead><tr><th>#</th><th>Criado</th><th>Tipo</th><th>Status</th><th>Ideia</th><th class="num">Mídias</th><th class="num">Ajustes</th><th class="num">Tokens</th><th class="num">Custo</th><th>Entregue</th></tr></thead>
+        <tbody id="tbPedidos"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-tokens" hidden>
+    <div class="bar">
+      <div class="seg" id="segGrupo">
+        <button data-g="dia" class="on">Dia</button><button data-g="mes">Mês</button><button data-g="ano">Ano</button>
+      </div>
+      <label class="muted">de <input type="date" id="tDe"></label>
+      <label class="muted">até <input type="date" id="tAte"></label>
+      <span class="grow" style="flex:1"></span>
+      <button id="btnCsv">⬇ Exportar CSV</button>
+    </div>
+    <div class="grid2">
+      <div class="card"><div class="chartbox"><canvas id="chart"></canvas></div></div>
+      <div class="card scroll">
+        <table>
+          <thead><tr><th>Período</th><th class="num">Pedidos</th><th class="num">Execuções</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Cache leitura</th><th class="num">Cache escrita</th><th class="num">Total</th><th class="num">US$</th><th class="num">R$</th></tr></thead>
+          <tbody id="tbTokens"></tbody>
+          <tfoot id="tfTokens"></tfoot>
+        </table>
+      </div>
+      <div class="card scroll">
+        <table>
+          <thead><tr><th>Modelo</th><th class="num">Execuções</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Cache leitura</th><th class="num">Cache escrita</th><th class="num">Total</th><th class="num">US$</th></tr></thead>
+          <tbody id="tbModelos"></tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin:0">Custo calculado pelo Claude Code com preço de tabela da API. Se você usa assinatura (Pro/Max), o valor é uma referência — os tokens são reais.</p>
+    </div>
+  </div>
+</main>
+
+<aside class="drawer" id="drawer"></aside>
+
+<div class="modal" id="qrModal">
+  <div class="box">
+    <h3 style="margin-top:0">Conectar WhatsApp do agente</h3>
+    <p class="muted">No celular do <b>número do agente</b>: WhatsApp → Aparelhos conectados → Conectar um aparelho.</p>
+    <div id="qrArea">Gerando QR code…</div>
+    <p><button id="qrFechar">Fechar</button></p>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const fmt = (n) => Number(n || 0).toLocaleString('pt-BR');
+const usd = (n) => 'US$ ' + Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const brl = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const api = (p, opt) => fetch(p, opt).then((r) => r.json());
+const STATUS = { coletando: 'Em conversa', na_fila: 'Na fila', gerando: 'Gerando', entregue: 'Entregue', finalizado: 'Finalizado', falhou: 'Falhou', cancelado: 'Cancelado', expirado: 'Expirado' };
+const KIND = { entrada: 'cliente', saida: 'agente→wa', agente: 'claude', sistema: 'sistema', erro: 'erro' };
+let usdBrl = 5.4, openId = null, grupo = 'dia', chart;
+
+// ---------- resumo ----------
+async function loadResumo() {
+  const r = await api('/api/resumo');
+  usdBrl = r.usdBrl;
+  const wa = $('#wa');
+  const st = r.whatsapp;
+  wa.className = 'pill ' + (st === 'open' ? 'ok' : st === 'connecting' || st === 'aguardando_qr' ? 'warn' : 'bad');
+  wa.textContent = st === 'open' ? 'WhatsApp conectado' : st === 'evolution_offline' ? 'Evolution API offline' : st === 'sem_instancia' ? 'WhatsApp sem instância' : 'WhatsApp: ' + st;
+  $('#btnConectar').hidden = st === 'open';
+  const busy = r.fila.current ? 1 : 0;
+  $('#fila').textContent = busy ? `Gerando #${r.fila.current.orderId} · ${r.fila.waiting.length} na fila` : r.fila.waiting.length ? `${r.fila.waiting.length} na fila` : 'Fila vazia';
+  $('#fila').className = 'pill ' + (busy ? 'warn' : 'ok');
+  const sum = (o, ...k) => k.reduce((a, x) => a + (o[x] || 0), 0);
+  const h = r.hoje.status, m = r.mes.status;
+  $('#kpis').innerHTML = [
+    ['Pedidos hoje', fmt(sum(h, ...Object.keys(STATUS))), `${fmt(sum(h, 'entregue', 'finalizado'))} entregues`],
+    ['Em andamento', fmt(sum(m, 'coletando', 'na_fila', 'gerando')), 'conversa, fila ou gerando'],
+    ['Entregues no mês', fmt(sum(m, 'entregue', 'finalizado')), `${fmt(sum(m, 'falhou'))} falharam`],
+    ['Tokens hoje', fmt(r.hoje.total), usd(r.hoje.cost_usd)],
+    ['Tokens no mês', fmt(r.mes.total), `${usd(r.mes.cost_usd)} · ${brl(r.mes.cost_usd * usdBrl)}`],
+    ['Tokens no ano', fmt(r.ano.total), `${usd(r.ano.cost_usd)} · ${brl(r.ano.cost_usd * usdBrl)}`],
+  ].map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join('');
+}
+
+// ---------- pedidos ----------
+async function loadPedidos() {
+  const q = new URLSearchParams({ status: $('#fStatus').value, q: $('#fBusca').value });
+  const rows = await api('/api/pedidos?' + q);
+  $('#tbPedidos').innerHTML = rows.length ? rows.map((r) => `
+    <tr class="click" data-id="${r.id}">
+      <td><b>#${r.id}</b></td><td>${esc(r.created_at.slice(0, 16))}</td><td>${esc(r.tipo)}</td>
+      <td><span class="st ${r.status}">${STATUS[r.status] || r.status}</span></td>
+      <td class="idea" title="${esc(r.idea)}">${esc(r.idea || r.error || '')}</td>
+      <td class="num">${r.media_count}</td><td class="num">${r.revisions}</td>
+      <td class="num">${fmt(r.tokens)}</td><td class="num">${r.cost_usd ? usd(r.cost_usd) : '—'}</td>
+      <td>${esc((r.delivered_at || '').slice(0, 16)) || '—'}</td>
+    </tr>`).join('') : '<tr><td colspan="10" class="empty">Nenhum pedido ainda. Mande a palavra-chave no WhatsApp do agente para começar.</td></tr>';
+}
+$('#tbPedidos').addEventListener('click', (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) openPedido(Number(tr.dataset.id)); });
+$('#fStatus').addEventListener('change', loadPedidos);
+$('#fBusca').addEventListener('input', () => { clearTimeout(window._b); window._b = setTimeout(loadPedidos, 250); });
+
+const fileUrl = (id, p) => `/api/pedidos/${id}/arquivo?p=${encodeURIComponent(p)}`;
+
+async function openPedido(id) {
+  const o = await api('/api/pedidos/' + id);
+  const sig = JSON.stringify(o);
+  if (openId === id && sig === window._lastSig && $('#drawer').classList.contains('open')) return; // nada mudou: não recarrega o player
+  window._lastSig = sig;
+  openId = id;
+  const tot = o.uso.reduce((a, u) => a + u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_write_tokens, 0);
+  const cost = o.uso.reduce((a, u) => a + u.cost_usd, 0);
+  const ans = o.respostas;
+  const d = $('#drawer');
+  const scrollPos = d.classList.contains('open') && d.dataset.id == id ? d.scrollTop : 0;
+  d.dataset.id = id;
+  d.innerHTML = `
+    <div class="head">
+      <h2>Pedido #${o.id} · ${esc(o.tipo)}</h2>
+      <span class="st ${o.status}">${STATUS[o.status] || o.status}</span>
+      ${o.output_file ? '<button data-act="reenviar">Reenviar vídeo</button>' : ''}
+      ${['falhou', 'cancelado', 'expirado'].includes(o.status) ? '<button data-act="refazer">Gerar de novo</button>' : ''}
+      ${['coletando', 'na_fila', 'gerando'].includes(o.status) ? '<button class="danger" data-act="cancelar">Cancelar</button>' : ''}
+      <button data-act="fechar">✕</button>
+    </div>
+    ${o.output_file ? `<section><h3>Vídeo entregue</h3>${/\.(mp4|webm)$/i.test(o.output_file) ? `<video controls src="${fileUrl(o.id, o.output_file)}"></video>` : `<a href="${fileUrl(o.id, o.output_file)}">⬇ ${esc(o.output_file)}</a>`}
+      ${o.summary ? `<p class="muted">${esc(o.summary)}</p>` : ''}</section>` : ''}
+    <section><h3>Pedido</h3><dl>
+      <dt>Criado</dt><dd>${esc(o.created_at)}</dd>
+      <dt>Início produção</dt><dd>${esc(o.started_at || '—')}</dd>
+      <dt>Entregue</dt><dd>${esc(o.delivered_at || '—')}</dd>
+      <dt>Contato</dt><dd>${esc(o.contact_name || '')} (${esc(o.phone.slice(0, 4))}•••${esc(o.phone.slice(-4))})</dd>
+      <dt>Etapa</dt><dd>${esc(o.step)}</dd>
+      <dt>Skills</dt><dd>${esc(o.skills.join(', ') || '—')}</dd>
+      ${ans.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}
+      <dt>Ideia</dt><dd>${esc(o.idea || '—')}</dd>
+      ${o.pending_fix ? `<dt>Ajuste pendente</dt><dd>${esc(o.pending_fix)}</dd>` : ''}
+      ${o.error ? `<dt>Erro</dt><dd style="color:var(--bad)">${esc(o.error)}</dd>` : ''}
+    </dl>
+    <p>${o.temPrompt ? `<a href="${fileUrl(o.id, 'prompt.txt')}" target="_blank">Ver prompt enviado ao Claude</a> · ` : ''}<a href="${fileUrl(o.id, 'agente.log')}" target="_blank">Log completo do agente</a></p></section>
+    <section><h3>Material recebido (${o.midias.length})</h3>
+      <div class="thumbs">${o.midias.map((m) => m.kind === 'imagem'
+        ? `<a class="img" href="${fileUrl(o.id, m.file)}" target="_blank" title="${esc(m.caption || m.file)}"><img loading="lazy" src="${fileUrl(o.id, m.file)}"></a>`
+        : `<a href="${fileUrl(o.id, m.file)}" target="_blank" title="${esc(m.file)}">${m.kind === 'video' ? '🎞️' : m.kind === 'audio' ? '🎵' : '📄'}<br>${esc(m.kind)}</a>`).join('') || '<span class="muted">nenhum</span>'}</div>
+    </section>
+    <section><h3>Tokens · ${fmt(tot)} · ${usd(cost)} · ${brl(cost * usdBrl)}</h3>
+      ${o.uso.length ? `<div class="card scroll"><table><thead><tr><th>Execução</th><th>Modelo</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Cache L.</th><th class="num">Cache E.</th><th class="num">US$</th><th class="num">Tempo</th></tr></thead><tbody>
+      ${o.uso.map((u) => `<tr><td>${u.run ? 'ajuste ' + u.run : 'geração'}</td><td>${esc(u.model)}</td><td class="num">${fmt(u.input_tokens)}</td><td class="num">${fmt(u.output_tokens)}</td><td class="num">${fmt(u.cache_read_tokens)}</td><td class="num">${fmt(u.cache_write_tokens)}</td><td class="num">${usd(u.cost_usd)}</td><td class="num">${u.duration_ms ? (u.duration_ms < 60000 ? Math.round(u.duration_ms / 1000) + ' s' : Math.round(u.duration_ms / 60000) + ' min') : '—'}</td></tr>`).join('')}
+      </tbody></table></div>` : '<span class="muted">ainda sem execução</span>'}
+    </section>
+    <section><h3>Como foi conduzido</h3><ul class="timeline">
+      ${o.eventos.map((e) => `<li><span class="ts">${esc(e.ts.slice(11, 19))}</span><span class="k ${e.kind}">${KIND[e.kind] || e.kind}</span><span class="t">${esc(e.text)}</span></li>`).join('')}
+    </ul></section>`;
+  d.classList.add('open');
+  d.scrollTop = scrollPos;
+}
+$('#drawer').addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'fechar') { $('#drawer').classList.remove('open'); openId = null; return; }
+  if (act === 'cancelar' && !confirm('Cancelar este pedido?')) return;
+  b.disabled = true;
+  const r = await api(`/api/pedidos/${openId}/${act}`, { method: 'POST' });
+  if (r.erro) alert(r.erro);
+  refresh();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#drawer').classList.remove('open'); openId = null; } });
+
+// ---------- tokens ----------
+function tokenQuery() { return new URLSearchParams({ agrupar: grupo, de: $('#tDe').value, ate: $('#tAte').value }); }
+async function loadTokens() {
+  const r = await api('/api/tokens?' + tokenQuery());
+  const rows = r.rows;
+  const tot = rows.reduce((a, x) => { for (const k of ['pedidos', 'execucoes', 'input', 'output', 'cache_read', 'cache_write', 'total', 'cost_usd']) a[k] = (a[k] || 0) + (x[k] || 0); return a; }, {});
+  const label = (p) => grupo === 'dia' ? p.split('-').reverse().join('/') : grupo === 'mes' ? p.split('-').reverse().join('/') : p;
+  $('#tbTokens').innerHTML = rows.length ? rows.slice().reverse().map((x) => `<tr><td>${label(x.periodo)}</td><td class="num">${fmt(x.pedidos)}</td><td class="num">${fmt(x.execucoes)}</td><td class="num">${fmt(x.input)}</td><td class="num">${fmt(x.output)}</td><td class="num">${fmt(x.cache_read)}</td><td class="num">${fmt(x.cache_write)}</td><td class="num"><b>${fmt(x.total)}</b></td><td class="num">${usd(x.cost_usd)}</td><td class="num">${brl(x.cost_usd * usdBrl)}</td></tr>`).join('')
+    : '<tr><td colspan="10" class="empty">Sem uso registrado no período.</td></tr>';
+  $('#tfTokens').innerHTML = rows.length ? `<tr><th>Total</th><th class="num">—</th><th class="num">${fmt(tot.execucoes)}</th><th class="num">${fmt(tot.input)}</th><th class="num">${fmt(tot.output)}</th><th class="num">${fmt(tot.cache_read)}</th><th class="num">${fmt(tot.cache_write)}</th><th class="num">${fmt(tot.total)}</th><th class="num">${usd(tot.cost_usd)}</th><th class="num">${brl(tot.cost_usd * usdBrl)}</th></tr>` : '';
+  $('#tbModelos').innerHTML = r.models.map((x) => `<tr><td>${esc(x.model)}</td><td class="num">${fmt(x.execucoes)}</td><td class="num">${fmt(x.input)}</td><td class="num">${fmt(x.output)}</td><td class="num">${fmt(x.cache_read)}</td><td class="num">${fmt(x.cache_write)}</td><td class="num">${fmt(x.total)}</td><td class="num">${usd(x.cost_usd)}</td></tr>`).join('') || '<tr><td colspan="8" class="empty">—</td></tr>';
+
+  if (!window.Chart) return;
+  const css = getComputedStyle(document.documentElement);
+  const c = (v) => css.getPropertyValue(v).trim();
+  const data = {
+    labels: rows.map((x) => label(x.periodo)),
+    datasets: [
+      { type: 'bar', maxBarThickness: 56, label: 'Entrada', data: rows.map((x) => x.input), backgroundColor: c('--accent'), stack: 't', yAxisID: 'y' },
+      { type: 'bar', maxBarThickness: 56, label: 'Saída', data: rows.map((x) => x.output), backgroundColor: c('--info'), stack: 't', yAxisID: 'y' },
+      { type: 'bar', maxBarThickness: 56, label: 'Cache leitura', data: rows.map((x) => x.cache_read), backgroundColor: c('--ok'), stack: 't', yAxisID: 'y' },
+      { type: 'bar', maxBarThickness: 56, label: 'Cache escrita', data: rows.map((x) => x.cache_write), backgroundColor: c('--warn'), stack: 't', yAxisID: 'y' },
+      { type: 'line', label: 'Custo (US$)', data: rows.map((x) => x.cost_usd), borderColor: c('--bad'), backgroundColor: c('--bad'), yAxisID: 'y2', tension: .3 },
+    ],
+  };
+  const opts = {
+    responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { labels: { color: c('--muted') } }, tooltip: { callbacks: { label: (ctx) => ctx.dataset.yAxisID === 'y2' ? ` ${usd(ctx.raw)}` : ` ${ctx.dataset.label}: ${fmt(ctx.raw)}` } } },
+    scales: {
+      x: { stacked: true, ticks: { color: c('--muted') }, grid: { display: false } },
+      y: { stacked: true, ticks: { color: c('--muted'), callback: (v) => fmt(v) }, grid: { color: c('--line') }, title: { display: true, text: 'tokens', color: c('--muted') } },
+      y2: { position: 'right', beginAtZero: true, ticks: { color: c('--muted'), callback: (v) => 'US$ ' + Number(v).toFixed(2) }, grid: { display: false }, title: { display: true, text: 'US$', color: c('--muted') } },
+    },
+  };
+  if (chart) { chart.data = data; chart.options = opts; chart.update(); } else chart = new Chart($('#chart'), { data, options: opts });
+}
+$('#segGrupo').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-g]'); if (!b) return;
+  grupo = b.dataset.g;
+  document.querySelectorAll('#segGrupo button').forEach((x) => x.classList.toggle('on', x === b));
+  loadTokens();
+});
+$('#tDe').addEventListener('change', loadTokens);
+$('#tAte').addEventListener('change', loadTokens);
+$('#btnCsv').addEventListener('click', () => { location.href = '/api/tokens.csv?' + tokenQuery(); });
+
+// ---------- abas ----------
+document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+  $('#tab-pedidos').hidden = b.dataset.tab !== 'pedidos';
+  $('#tab-tokens').hidden = b.dataset.tab !== 'tokens';
+  if (b.dataset.tab === 'tokens') loadTokens();
+}));
+
+// ---------- WhatsApp / QR ----------
+let qrTimer;
+$('#btnConectar').addEventListener('click', async () => {
+  $('#qrModal').classList.add('open');
+  $('#qrArea').textContent = 'Gerando QR code…';
+  const r = await api('/api/whatsapp/conectar', { method: 'POST' });
+  if (r.erro) { $('#qrArea').textContent = 'Erro: ' + r.erro; return; }
+  const show = (x) => {
+    if (x.estado === 'open') { $('#qrArea').innerHTML = '<p style="color:var(--ok);font-weight:600">✅ Conectado!</p>'; clearInterval(qrTimer); loadResumo(); return; }
+    $('#qrArea').innerHTML = x.qr ? `<img src="${esc(x.qr)}" alt="QR code">` : 'Aguardando QR code…';
+  };
+  show(r);
+  clearInterval(qrTimer);
+  qrTimer = setInterval(async () => show(await api('/api/whatsapp')), 4000);
+});
+$('#qrFechar').addEventListener('click', () => { $('#qrModal').classList.remove('open'); clearInterval(qrTimer); });
+
+// ---------- atualização automática ----------
+function refresh() {
+  loadResumo().catch(() => {});
+  if (!$('#tab-pedidos').hidden) loadPedidos().catch(() => {});
+  else loadTokens().catch(() => {});
+  if (openId) openPedido(openId).catch(() => {});
+}
+const today = new Date();
+$('#tAte').value = today.toISOString().slice(0, 10);
+$('#tDe').value = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate()).toISOString().slice(0, 10);
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
